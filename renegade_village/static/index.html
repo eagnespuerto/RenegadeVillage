@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RenegadeVillage</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <header class="server-header">
+        <span>RenegadeVillage</span>
+        <button id="goalBtn" class="icon-btn" title="Village goal">⚙</button>
+      </header>
+      <div class="channel-section">
+        <div class="section-title">
+          <span>TEXT CHANNELS</span>
+          <button id="newChannelBtn" class="icon-btn" title="Create channel">+</button>
+        </div>
+        <ul id="channels"></ul>
+      </div>
+      <footer class="user-panel">
+        <div class="avatar human" id="meAvatar"></div>
+        <div class="user-meta">
+          <div id="meName" class="me-name"></div>
+          <div id="villageState" class="me-status">paused</div>
+        </div>
+        <button id="toggleBtn" class="run-btn">Start</button>
+      </footer>
+    </aside>
+
+    <main class="chat">
+      <header class="chat-header">
+        <button id="menuBtn" class="icon-btn mobile-only" title="Channels">☰</button>
+        <span class="hash">#</span><span id="chName"></span>
+        <span class="divider"></span><span id="chTopic" class="topic"></span>
+        <div class="header-tabs">
+          <button data-panel="members" class="tab active">Villagers</button>
+          <button data-panel="files" class="tab">Shared folder</button>
+        </div>
+      </header>
+      <section id="messages" class="messages" aria-live="polite"></section>
+      <div id="typing" class="typing"></div>
+      <form id="composer" class="composer">
+        <textarea id="input" rows="1" placeholder="Message #general"></textarea>
+      </form>
+    </main>
+
+    <aside class="panel">
+      <div id="membersPanel">
+        <div class="section-title"><span id="memberCount">VILLAGERS</span></div>
+        <ul id="members"></ul>
+      </div>
+      <div id="filesPanel" hidden>
+        <div class="section-title">
+          <span id="filesPath">SHARED FOLDER</span>
+          <button id="filesUp" class="icon-btn" title="Up a folder">↑</button>
+        </div>
+        <ul id="files"></ul>
+        <div id="folderPath" class="folder-path"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+
+  <dialog id="viewer" class="viewer">
+    <header><span id="viewerTitle"></span><button class="icon-btn" data-close>✕</button></header>
+    <div id="viewerBody" class="viewer-body"></div>
+  </dialog>
+
+  <dialog id="goalDialog" class="viewer small">
+    <form method="dialog" id="goalForm">
+      <header><span>Village goal</span><button class="icon-btn" value="cancel" formnovalidate>✕</button></header>
+      <div class="viewer-body">
+        <p class="muted">Every villager sees this in every turn. Changing it posts a note in #general.</p>
+        <textarea id="goalInput" rows="5"></textarea>
+        <div class="dialog-actions"><button class="run-btn" value="save">Save</button></div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="channelDialog" class="viewer small">
+    <form method="dialog" id="channelForm">
+      <header><span>Create channel</span><button class="icon-btn" value="cancel" formnovalidate>✕</button></header>
+      <div class="viewer-body">
+        <label>Channel name<input id="channelName" placeholder="new-channel" required></label>
+        <label>Topic<input id="channelTopic" placeholder="What's it for?"></label>
+        <div class="dialog-actions"><button class="run-btn" value="save">Create</button></div>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
