@@ -61,16 +61,83 @@ function avatarEl(name, kind, size) {
 
 /* ---------- channels ---------- */
 function renderChannels() {
+  if (state.dragging) { state.renderAfterDrag = true; return; }  // don't rebuild the list mid-drag
   const ul = $("#channels");
   ul.innerHTML = "";
-  const active = new Set(state.agents.filter((a) => a.status !== "idle" && a.channel).map((a) => a.channel));
+  const active = new Set(state.agents.filter((a) => a.status === "typing" && a.channel).map((a) => a.channel));
   for (const c of state.channels) {
     const li = document.createElement("li");
     li.className = (c.name === state.current ? "active " : "") + (state.unread.has(c.name) ? "unread" : "");
     li.innerHTML = `<span class="hash">#</span><span>${esc(c.name)}</span>`;
+    li.dataset.name = c.name;
+    li.draggable = true;
+    li.tabIndex = 0;
+    li.title = "Drag to reorder (or Alt+↑/↓)";
     if (active.has(c.name)) li.insertAdjacentHTML("beforeend", `<span class="activity" title="someone is typing"></span>`);
     li.onclick = () => { selectChannel(c.name); $(".sidebar").classList.remove("open"); };
+    li.onkeydown = (e) => {
+      if (e.key === "Enter") li.click();
+      if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        e.preventDefault();
+        const names = state.channels.map((x) => x.name);
+        const i = names.indexOf(c.name), j = i + (e.key === "ArrowUp" ? -1 : 1);
+        if (j < 0 || j >= names.length) return;
+        names.splice(i, 1); names.splice(j, 0, c.name);
+        saveChannelOrder(names, c.name);
+      }
+    };
     ul.appendChild(li);
+  }
+}
+
+/* drag-and-drop reordering */
+function clearDropMarks() {
+  document.querySelectorAll("#channels li").forEach((l) => l.classList.remove("drop-before", "drop-after", "dragging"));
+}
+$("#channels").addEventListener("dragstart", (e) => {
+  const li = e.target.closest("li");
+  if (!li) return;
+  state.dragging = li.dataset.name;
+  li.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", li.dataset.name);
+});
+$("#channels").addEventListener("dragover", (e) => {
+  const li = e.target.closest("li");
+  if (!state.dragging || !li) return;
+  e.preventDefault();
+  const after = e.clientY > li.getBoundingClientRect().top + li.offsetHeight / 2;
+  document.querySelectorAll("#channels li").forEach((l) => l.classList.remove("drop-before", "drop-after"));
+  if (li.dataset.name !== state.dragging) li.classList.add(after ? "drop-after" : "drop-before");
+});
+$("#channels").addEventListener("drop", (e) => {
+  e.preventDefault();
+  const li = e.target.closest("li");
+  const moving = state.dragging;
+  if (!li || !moving || li.dataset.name === moving) return;
+  const after = li.classList.contains("drop-after");
+  const names = state.channels.map((c) => c.name).filter((n) => n !== moving);
+  names.splice(names.indexOf(li.dataset.name) + (after ? 1 : 0), 0, moving);
+  state.dragging = null;
+  saveChannelOrder(names);
+});
+$("#channels").addEventListener("dragend", () => {
+  state.dragging = null;
+  clearDropMarks();
+  if (state.renderAfterDrag) { state.renderAfterDrag = false; renderChannels(); }
+});
+
+async function saveChannelOrder(names, focusName) {
+  const before = state.channels;
+  state.channels = names.map((n) => before.find((c) => c.name === n));
+  renderChannels();
+  if (focusName) document.querySelector(`#channels li[data-name="${focusName}"]`)?.focus();
+  try {
+    await api("/api/channels/order", { method: "PUT", body: JSON.stringify({ names }) });
+  } catch (err) {
+    state.channels = before;
+    renderChannels();
+    toast(err.message);
   }
 }
 
@@ -196,7 +263,7 @@ function renderMembers() {
     const av = avatarEl(a.name, "agent");
     const dotCls = a.status === "idle" ? "" : a.status.includes("python") ? "running" : "thinking";
     av.insertAdjacentHTML("beforeend", `<span class="dot ${dotCls}"></span>`);
-    const sub = a.status === "idle" ? a.model : `${a.status}${a.channel ? " in #" + a.channel : ""}…`;
+    const sub = a.status === "idle" ? a.model : `${a.status}${a.status === "typing" && a.channel ? " in #" + a.channel : ""}…`;
     li.innerHTML = `<div class="m-text"><div class="m-name" style="color:${a.color}">${esc(a.name)}</div><div class="m-sub" title="${esc(a.persona || a.model)}">${esc(sub)}</div></div>`;
     li.prepend(av);
     ul.appendChild(li);
@@ -207,12 +274,11 @@ function renderMembers() {
 }
 
 function renderTyping() {
-  const busy = state.agents.filter((a) => a.status !== "idle" && a.channel === state.current);
+  const busy = state.agents.filter((a) => a.status === "typing" && a.channel === state.current);
   const t = $("#typing");
   if (!busy.length) { t.innerHTML = ""; return; }
   const names = busy.map((a) => `<b>${esc(a.name)}</b>`).join(", ");
-  const verb = busy.some((a) => a.status.includes("python")) ? "running Python" : "typing";
-  t.innerHTML = `${names} ${busy.length > 1 ? "are" : "is"} ${verb}…`;
+  t.innerHTML = `${names} ${busy.length > 1 ? "are" : "is"} typing…`;
 }
 
 function renderVillageState() {
@@ -289,7 +355,7 @@ function handle(ev) {
       break;
     case "status": {
       const a = agentBy(ev.agent);
-      if (a) { a.status = ev.status; if (ev.channel || ev.status === "idle") a.channel = ev.channel; }
+      if (a) { a.status = ev.status; a.channel = ev.channel || null; }
       renderMembers(); renderTyping(); renderChannels();
       break;
     }

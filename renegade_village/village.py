@@ -61,18 +61,21 @@ different model, live and work together alongside a human ({user}). You run on t
 Village goal (set by {user}): {goal}
 
 How the village works:
-- It is a Discord-style server with text channels. Everyone takes turns; this is your turn.
+- It is a Discord-style server with several text channels. Everyone takes turns; this is your turn.
 - Talk ONLY by calling post_message. Keep messages conversational and reasonably short, like chat.
-  Reply in the channel where the conversation is happening. Mention others with @name.
+  Mention others with @name.
+- Use the channels like a real server: post each thing where it belongs, going by the channel topics
+  (e.g. plans and task splits in #projects, code and results in #simulations, new documents in #docs,
+  coordination in #general). Don't pile everything into one channel. Answer people where they asked,
+  and feel free to post in more than one channel in a turn. Create a channel when a project needs its own.
 - There is a shared folder for real work. Write Markdown documents, Python scripts and data there with
   write_file, and run code with run_python.{python_note}
-- Create a new channel when a project deserves its own space.
 - Your private notebook (update_memory) is your only memory between turns. Use it.
 - Don't repeat what's already been said. If nothing needs you right now, just call end_turn.
-- You have at most {steps} tool rounds this turn.
+- You have {steps} tool rounds this turn. If you do work (write files, run code), tell the others about it
+  with post_message before your rounds run out - work nobody hears about is wasted.
 
 Villagers: {roster}
-Channels: {channels}
 
 Your notebook:
 {memory}"""
@@ -192,27 +195,43 @@ class Village:
 
     # a single turn --------------------------------------------------------
     def _context(self, a: AgentSpec, last_seen: int) -> tuple[str, str, int]:
-        msgs = self.store.recent_messages(self.cfg.context_messages)
-        top = msgs[-1]["id"] if msgs else 0
-        lines, focus = [], "general"
-        for m in msgs:
-            new = m["id"] > last_seen and m["author"] != a.name
-            if new:
-                focus = m["channel"]
-            att = f" [attached: {', '.join(m['attachments'])}]" if m["attachments"] else ""
-            lines.append(f"{'NEW ' if new else ''}[#{m['channel']} {_fmt_time(m['created_at'])}] "
-                         f"{m['author']}: {m['content']}{att}")
-        body = "\n".join(lines) or "(no messages yet - you're among the first to speak)"
-        return f"Recent messages across all channels (oldest first):\n{body}\n\nIt's your turn.", focus, top
+        """Every channel with its own recent messages, so quiet channels stay in view."""
+        chans = self.store.list_channels()
+        per = max(4, self.cfg.context_messages // max(1, len(chans)))
+        top, focus, focus_id = self.store.max_message_id(), "general", 0
+        sections, quiet = [], []
+        for c in chans:
+            msgs = self.store.get_messages(c["name"], per)
+            topic = f" - {c['topic']}" if c["topic"] else ""
+            if not msgs:
+                quiet.append(f"#{c['name']}{topic}")
+                continue
+            new_ids = {m["id"] for m in msgs if m["id"] > last_seen and m["author"] != a.name}
+            if new_ids and max(new_ids) > focus_id:
+                focus, focus_id = c["name"], max(new_ids)
+            lines = []
+            for m in msgs:
+                att = f" [attached: {', '.join(m['attachments'])}]" if m["attachments"] else ""
+                text = m["content"] if len(m["content"]) <= 1200 else m["content"][:1200] + " ..."
+                mark = "NEW " if m["id"] in new_ids else ""
+                lines.append(f"{mark}[{_fmt_time(m['created_at'])}] {m['author']}: {text}{att}")
+            head = f"## #{c['name']}{topic}" + (f"  ({len(new_ids)} new)" if new_ids else "")
+            sections.append((bool(new_ids), msgs[-1]["id"], head + "\n" + "\n".join(lines)))
+        # channels with news first, then by latest activity
+        sections.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        body = "\n\n".join(sec for _, _, sec in sections) or "(no messages yet - you're among the first to speak)"
+        if quiet:
+            body += "\n\nQuiet channels (no messages yet): " + ", ".join(quiet)
+        return (f"Channels and their recent messages (NEW = since your last turn):\n\n{body}\n\n"
+                "It's your turn. For each message you post, pick the channel whose topic fits it best; "
+                "the busiest channel isn't automatically the right one."), focus, top
 
     def _system_prompt(self, a: AgentSpec, memory: str) -> str:
         roster = ", ".join(f"{x.name} ({x.model})" for x in self.cfg.enabled_agents())
-        chans = ", ".join(f"#{c['name']}" + (f" ({c['topic']})" if c["topic"] else "")
-                          for c in self.store.list_channels())
         return SYSTEM_TEMPLATE.format(
             name=a.name, user=self.cfg.user_name, model=a.model,
             persona=f"Your personality: {a.persona}\n" if a.persona else "",
-            goal=self.cfg.village_goal, roster=roster, channels=chans,
+            goal=self.cfg.village_goal, roster=roster,
             python_note="" if self.cfg.allow_python else " (run_python is disabled right now.)",
             steps=self.cfg.max_steps_per_turn, memory=memory or "(empty)")
 
@@ -222,8 +241,9 @@ class Village:
             user_msg, focus, top = self._context(a, state["last_seen"])
             messages = [{"role": "system", "content": self._system_prompt(a, state["memory"])},
                         {"role": "user", "content": user_msg}]
-            await self._set_status(a.name, "thinking", focus)
-            posted = False
+            await self._set_status(a.name, "thinking")
+            self._posted = False
+            self._unreported = False  # wrote files / ran code since the last post
             try:
                 for _ in range(self.cfg.max_steps_per_turn):
                     reply = await self.client.chat(a.model, messages, TOOLS)
@@ -231,8 +251,8 @@ class Village:
                     content = (reply.get("content") or "").strip()
                     if not calls:
                         # Models that answer in plain text instead of calling post_message.
-                        if content and not posted:
-                            await self.post(focus, a.name, "agent", content)
+                        if content and not self._posted:
+                            await self._say(a, focus, content)
                         break
                     messages.append({"role": "assistant", "content": reply.get("content") or "",
                                      "tool_calls": calls})
@@ -240,19 +260,48 @@ class Village:
                     for call in calls:
                         name = call.get("function", {}).get("name", "")
                         result = await self._run_tool(a, name, _args(call))
-                        if name == "post_message" and not result.startswith("error"):
-                            posted = True
                         if name == "end_turn":
                             done = True
                         messages.append({"role": "tool", "tool_name": name, "content": result})
                     if done:
                         break
+                else:
+                    if not self._posted or self._unreported:
+                        await self._wrap_up(a, messages, focus)
             except Exception as e:  # keep the village alive if one model misbehaves
                 log.exception("turn failed for %s", a.name)
                 await self.broadcast({"type": "error", "agent": a.name, "error": str(e)[:500]})
             finally:
                 self.store.set_agent_state(a.name, last_seen=top)
                 await self._set_status(a.name, "idle")
+
+    async def _wrap_up(self, a: AgentSpec, messages: list[dict], focus: str) -> None:
+        """Out of rounds without posting: one last call that can only post a summary."""
+        messages.append({"role": "user", "content":
+                         "You've used all your tool rounds for this turn and haven't told the others about "
+                         "your latest work yet. Post ONE short message now saying what you did or found "
+                         "(mention files by path), in the channel where it fits best."})
+        post_only = [t for t in TOOLS if t["function"]["name"] == "post_message"]
+        reply = await self.client.chat(a.model, messages, post_only)
+        for call in reply.get("tool_calls") or []:
+            if call.get("function", {}).get("name") == "post_message":
+                if not (await self._run_tool(a, "post_message", _args(call))).startswith("error"):
+                    return
+        content = (reply.get("content") or "").strip()
+        if content:
+            await self._say(a, focus, content)
+
+    async def _say(self, a: AgentSpec, channel: str, content: str,
+                   attachments: list[str] | None = None) -> None:
+        """Show '<name> is typing' in the channel briefly, then post, so typing always ends in a message."""
+        await self._set_status(a.name, "typing", channel)
+        delay = min(self.cfg.typing_seconds_max, 0.5 + len(content) / 400)
+        if delay > 0:
+            await asyncio.sleep(delay)
+        await self.post(channel, a.name, "agent", content, attachments)
+        self._posted = True
+        self._unreported = False
+        await self._set_status(a.name, "thinking")
 
     async def _run_tool(self, a: AgentSpec, name: str, args: dict) -> str:
         try:
@@ -272,8 +321,7 @@ class Village:
             for p in atts:
                 if not self.ws.resolve(p).is_file():
                     return f"error: attachment not found: {p}"
-            await self._set_status(a.name, "thinking", ch)
-            await self.post(ch, a.name, "agent", content, atts)
+            await self._say(a, ch, content, atts)
             if self.running:  # while paused only the human's @mentions wake agents
                 self.nudge([n for n in self.mentioned(content) if n != a.name])
             return f"posted to #{ch}"
@@ -298,6 +346,7 @@ class Village:
             return self.ws.read_file(str(args["path"]))
         if name == "write_file":
             rel = self.ws.write_file(str(args["path"]), str(args.get("content", "")), bool(args.get("append")))
+            self._unreported = True
             await self.broadcast({"type": "files", "by": a.name, "paths": [rel]})
             return f"wrote {rel}"
         if name == "run_python":
@@ -309,6 +358,7 @@ class Village:
                 args=[str(x) for x in args.get("args") or []],
                 timeout=self.cfg.python_timeout, tag=re.sub(r"\W", "", a.name) or "agent")
             await self._set_status(a.name, "thinking")
+            self._unreported = True
             if res["files_changed"]:
                 await self.broadcast({"type": "files", "by": a.name, "paths": res["files_changed"]})
             return json.dumps(res, indent=1)

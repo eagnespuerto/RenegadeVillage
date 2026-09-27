@@ -47,7 +47,8 @@ class Config:
     village_goal: str = DEFAULT_GOAL
     turn_interval: float = 8.0  # seconds between agent turns while the village runs
     max_steps_per_turn: int = 6  # tool-call rounds an agent gets per turn
-    context_messages: int = 40  # recent messages shown to an agent each turn
+    context_messages: int = 60  # recent messages shown to an agent each turn, spread across channels
+    typing_seconds_max: float = 2.5  # "is typing" pause before each post, scaled by length
     python_timeout: int = 60
     allow_python: bool = True
     port: int = 8642

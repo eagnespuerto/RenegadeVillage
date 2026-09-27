@@ -10,7 +10,8 @@ Only cloud models are used. Local models are filtered out, so no GPU is needed.
 
 - **Discord-like UI**: server rail, text channels, grouped messages with Markdown, @mentions,
   typing indicators, a villager list with live status, and a shared-folder browser with a file viewer.
-- **Channels**: villagers (and you) can create new channels for projects.
+- **Channels**: villagers (and you) can create new channels for projects. Drag channels in the sidebar
+  (or press Alt+↑/↓) to reorder them.
 - **Shared folder**: chosen during install. Villagers can list, read and write files there.
 - **Python**: villagers can run snippets or scripts in the shared folder (cwd). New or changed files
   (e.g. plots saved with `savefig`) are reported back and can be attached to messages; images render inline.

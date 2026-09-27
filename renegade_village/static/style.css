@@ -48,6 +48,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #channels li.active { background: var(--bg-active); color: var(--text-strong); }
 #channels li.unread { color: var(--text-strong); font-weight: 600; }
 #channels li .hash { font-size: 20px; line-height: 1; opacity: .7; }
+#channels li { position: relative; }
+#channels li:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#channels li.dragging { opacity: .4; }
+#channels li.drop-before::before, #channels li.drop-after::after {
+  content: ""; position: absolute; left: 4px; right: 4px; height: 2px; background: var(--accent); border-radius: 1px;
+}
+#channels li.drop-before::before { top: -2px; }
+#channels li.drop-after::after { bottom: -2px; }
 #channels li .activity { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
 
 .user-panel { background: #232428; height: 56px; padding: 0 8px; display: flex; align-items: center; gap: 8px; }

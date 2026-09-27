@@ -52,6 +52,10 @@ class UserBody(BaseModel):
     name: str
 
 
+class OrderBody(BaseModel):
+    names: list[str]
+
+
 def create_app(cfg: Config, client: OllamaClient | None = None, save_config: bool = True,
                autostart: bool = False) -> FastAPI:
     hub = Hub()
@@ -105,6 +109,16 @@ def create_app(cfg: Config, client: OllamaClient | None = None, save_config: boo
         if created:
             await hub.broadcast({"type": "channels", "channels": store.list_channels()})
         return {"name": ch, "created": created}
+
+    @app.put("/api/channels/order")
+    async def reorder_channels(body: OrderBody):
+        try:
+            store.reorder_channels([normalize_channel(n) for n in body.names])
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        channels = store.list_channels()
+        await hub.broadcast({"type": "channels", "channels": channels})
+        return channels
 
     @app.post("/api/village/start")
     async def start():

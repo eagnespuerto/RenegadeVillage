@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS channels (
     name TEXT PRIMARY KEY,
     topic TEXT NOT NULL DEFAULT '',
     created_by TEXT NOT NULL DEFAULT 'system',
-    created_at REAL NOT NULL
+    created_at REAL NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,6 +48,13 @@ class Store:
         self._lock = threading.Lock()
         with self._lock:
             self._db.executescript(SCHEMA)
+            cols = {r[1] for r in self._db.execute("PRAGMA table_info(channels)")}
+            if "position" not in cols:  # databases from before channel reordering
+                self._db.execute("ALTER TABLE channels ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
+                names = [r[0] for r in self._db.execute("SELECT name FROM channels ORDER BY created_at, name")]
+                self._db.executemany("UPDATE channels SET position=? WHERE name=?",
+                                     [(i, n) for i, n in enumerate(names)])
+                self._db.commit()
 
     # channels -------------------------------------------------------------
     def ensure_channel(self, name: str, topic: str = "", created_by: str = "system") -> tuple[str, bool]:
@@ -56,7 +64,8 @@ class Store:
             raise ValueError(f"invalid channel name: {name!r}")
         with self._lock:
             cur = self._db.execute(
-                "INSERT OR IGNORE INTO channels(name, topic, created_by, created_at) VALUES (?,?,?,?)",
+                "INSERT OR IGNORE INTO channels(name, topic, created_by, created_at, position)"
+                " VALUES (?,?,?,?, (SELECT COALESCE(MAX(position), -1) + 1 FROM channels))",
                 (norm, topic, created_by, time.time()),
             )
             self._db.commit()
@@ -68,8 +77,21 @@ class Store:
 
     def list_channels(self) -> list[dict]:
         with self._lock:
-            rows = self._db.execute("SELECT * FROM channels ORDER BY created_at, name").fetchall()
+            rows = self._db.execute("SELECT * FROM channels ORDER BY position, created_at, name").fetchall()
         return [dict(r) for r in rows]
+
+    def reorder_channels(self, names: list[str]) -> None:
+        """Put the given channels first, in that order; any not listed keep their relative order after."""
+        current = [c["name"] for c in self.list_channels()]
+        unknown = [n for n in names if n not in current]
+        if unknown:
+            raise ValueError(f"unknown channels: {', '.join(unknown)}")
+        seen = list(dict.fromkeys(names))
+        order = seen + [n for n in current if n not in seen]
+        with self._lock:
+            self._db.executemany("UPDATE channels SET position=? WHERE name=?",
+                                 [(i, n) for i, n in enumerate(order)])
+            self._db.commit()
 
     # messages -------------------------------------------------------------
     def add_message(self, channel: str, author: str, author_kind: str, content: str,

@@ -1,9 +1,13 @@
 """Thin Ollama client that only ever exposes cloud models."""
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 
 CLOUD_HOST = "https://ollama.com"
+RETRY_STATUS = {429, 500, 502, 503, 504}
+RETRY_WAITS = [3, 8, 20]  # seconds
 
 
 class OllamaError(RuntimeError):
@@ -59,13 +63,20 @@ class OllamaClient:
         body = {"model": model, "messages": messages, "stream": False}
         if tools:
             body["tools"] = tools
-        try:
-            r = await self._http.post("/api/chat", json=body)
-        except httpx.HTTPError as e:
-            raise OllamaError(f"{model}: request failed: {e}") from e
-        if r.status_code >= 400:
-            raise OllamaError(f"{model}: HTTP {r.status_code}: {r.text[:300]}")
-        return r.json().get("message", {})
+        # Free-tier cloud usage answers 429 "too many concurrent requests" fairly often; back off and retry.
+        for wait in [*RETRY_WAITS, None]:
+            try:
+                r = await self._http.post("/api/chat", json=body)
+            except httpx.TransportError as e:
+                if wait is None:
+                    raise OllamaError(f"{model}: request failed: {e}") from e
+            else:
+                if r.status_code < 400:
+                    return r.json().get("message", {})
+                if r.status_code not in RETRY_STATUS or wait is None:
+                    raise OllamaError(f"{model}: HTTP {r.status_code}: {r.text[:300]}")
+            await asyncio.sleep(wait)
+        raise AssertionError("unreachable")
 
     async def aclose(self) -> None:
         await self._http.aclose()
