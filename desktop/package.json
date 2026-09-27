@@ -1,0 +1,13 @@
+{
+  "name": "renegade-village-desktop",
+  "version": "0.1.0",
+  "description": "Desktop window for RenegadeVillage: starts the Python server and shows the chat outside the browser",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.4.5"
+  }
+}

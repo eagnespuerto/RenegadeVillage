@@ -51,7 +51,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #channels li .activity { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
 
 .user-panel { background: #232428; height: 56px; padding: 0 8px; display: flex; align-items: center; gap: 8px; }
+.me-btn {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; background: none; border: 0;
+  padding: 4px; margin-left: -4px; border-radius: 4px; text-align: left;
+}
+.me-btn:hover { background: var(--bg-active); }
+.edit-hint { color: var(--muted); font-size: 12px; opacity: 0; }
+.me-btn:hover .edit-hint, .me-btn:focus-visible .edit-hint { opacity: 1; }
 .user-meta { flex: 1; min-width: 0; }
+.me-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .me-name { font-weight: 600; font-size: 14px; color: var(--text-strong); }
 .me-status { font-size: 12px; color: var(--muted); }
 .run-btn { background: var(--accent); border: 0; color: #fff; border-radius: 4px; padding: 6px 12px; font-weight: 600; }

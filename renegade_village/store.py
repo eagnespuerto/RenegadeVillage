@@ -110,6 +110,11 @@ class Store:
             rows = self._db.execute("SELECT * FROM messages ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [self._row(r) for r in reversed(rows)]
 
+    def rename_human(self, old: str, new: str) -> None:
+        with self._lock:
+            self._db.execute("UPDATE messages SET author=? WHERE author=? AND author_kind='human'", (new, old))
+            self._db.commit()
+
     def max_message_id(self) -> int:
         with self._lock:
             return self._db.execute("SELECT COALESCE(MAX(id), 0) FROM messages").fetchone()[0]

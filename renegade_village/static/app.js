@@ -12,7 +12,12 @@ function localSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
 
 async function api(path, opts = {}) {
   const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
-  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  if (!r.ok) {
+    const t = await r.text();
+    let msg = t;
+    try { msg = JSON.parse(t).detail || t; } catch {}
+    throw new Error(msg);
+  }
   return r.json();
 }
 
@@ -288,6 +293,11 @@ function handle(ev) {
       renderMembers(); renderTyping(); renderChannels();
       break;
     }
+    case "user":
+      state.user = ev.name;
+      renderMembers();
+      selectChannel(state.current);  // re-render so past messages show the new name
+      break;
     case "village":
       state.running = ev.running;
       renderVillageState();
@@ -348,6 +358,12 @@ $("#goalForm").addEventListener("submit", async (e) => {
   if (e.submitter && e.submitter.value !== "save") return;
   const r = await api("/api/village/goal", { method: "PUT", body: JSON.stringify({ goal: $("#goalInput").value }) });
   state.goal = r.goal;
+});
+$("#meBtn").onclick = () => { $("#nameInput").value = state.user; $("#nameDialog").showModal(); $("#nameInput").select(); };
+$("#nameForm").addEventListener("submit", async (e) => {
+  if (e.submitter && e.submitter.value !== "save") return;
+  try { await api("/api/user", { method: "PUT", body: JSON.stringify({ name: $("#nameInput").value }) }); }
+  catch (err) { toast(err.message); }
 });
 $("#newChannelBtn").onclick = () => { $("#channelName").value = ""; $("#channelTopic").value = ""; $("#channelDialog").showModal(); };
 $("#channelForm").addEventListener("submit", async (e) => {

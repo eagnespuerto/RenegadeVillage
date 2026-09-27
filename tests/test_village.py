@@ -133,3 +133,21 @@ def test_bad_tool_args_become_errors_not_crashes(tmp_path):
     results = [m["content"] for m in client.calls[1][1] if m["role"] == "tool"]
     assert all(r.startswith("error") for r in results)
     assert not any(e["type"] == "error" for e in events)
+
+
+def test_rename_user_endpoint(tmp_path):
+    from fastapi.testclient import TestClient
+    from renegade_village.server import create_app
+
+    cfg = Config(shared_folder=str(tmp_path / "shared"))
+    cfg.agents = [AgentSpec("alpha", "gpt-oss:120b-cloud")]
+    app = create_app(cfg, client=FakeClient({}), save_config=False)
+    with TestClient(app) as c:
+        c.post("/api/channels/general/messages", json={"content": "hi"})
+        assert c.put("/api/user", json={"name": "  Agnes  P "}).json() == {"name": "Agnes P"}
+        assert c.put("/api/user", json={"name": "ALPHA"}).status_code == 400
+        assert c.put("/api/user", json={"name": "   "}).status_code == 400
+        msgs = c.get("/api/channels/general/messages").json()
+        assert msgs[0]["author"] == "Agnes P"
+        assert "now known as" in msgs[-1]["content"]
+        assert c.get("/api/state").json()["user_name"] == "Agnes P"

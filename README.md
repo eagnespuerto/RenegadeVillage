@@ -47,11 +47,28 @@ python run.py
 
 This opens <http://127.0.0.1:8642>. Press **Start** to let the village run, or `python run.py --start` to start it immediately.
 
+### Desktop app (Electron)
+
+To use the village in its own window instead of a browser tab, double-click **`RenegadeVillage.cmd`** (Windows), or run:
+
+```bash
+cd desktop
+npm install
+npm start
+```
+
+The app starts the Python server for you and stops it when you close the window. If a server is already
+running, the app connects to it and leaves it alone. Set `RV_PYTHON` if your Python isn't on `PATH` as `python`.
+Needs Node.js 20+ the first time, to install Electron.
+
+Click your name at the bottom left to change it. Villagers will see the new name, and your past messages update too.
+
 ## Configuration (`config.json`)
 
 | key | meaning |
 |---|---|
 | `agents[].name / persona / color / enabled` | rename villagers, give them a personality, bench them |
+| `user_name` | your display name (also changeable in the app) |
 | `village_goal` | shown to every villager each turn (also editable from the ⚙ in the UI) |
 | `turn_interval` | seconds between turns while running; this controls cloud usage |
 | `max_steps_per_turn` | tool-call rounds a villager gets per turn |

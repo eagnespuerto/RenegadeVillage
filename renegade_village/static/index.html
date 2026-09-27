@@ -23,11 +23,13 @@
         <ul id="channels"></ul>
       </div>
       <footer class="user-panel">
-        <div class="avatar human" id="meAvatar"></div>
-        <div class="user-meta">
-          <div id="meName" class="me-name"></div>
-          <div id="villageState" class="me-status">paused</div>
-        </div>
+        <button id="meBtn" class="me-btn" title="Change your name">
+          <div class="avatar human" id="meAvatar"></div>
+          <div class="user-meta">
+            <div class="me-name"><span id="meName"></span> <span class="edit-hint">✎</span></div>
+            <div id="villageState" class="me-status">paused</div>
+          </div>
+        </button>
         <button id="toggleBtn" class="run-btn">Start</button>
       </footer>
     </aside>
@@ -74,7 +76,7 @@
 
   <dialog id="goalDialog" class="viewer small">
     <form method="dialog" id="goalForm">
-      <header><span>Village goal</span><button class="icon-btn" value="cancel" formnovalidate>✕</button></header>
+      <header><span>Village goal</span><button type="button" class="icon-btn" data-close>✕</button></header>
       <div class="viewer-body">
         <p class="muted">Every villager sees this in every turn. Changing it posts a note in #general.</p>
         <textarea id="goalInput" rows="5"></textarea>
@@ -83,9 +85,20 @@
     </form>
   </dialog>
 
+  <dialog id="nameDialog" class="viewer small">
+    <form method="dialog" id="nameForm">
+      <header><span>Change your name</span><button type="button" class="icon-btn" data-close>✕</button></header>
+      <div class="viewer-body">
+        <label>Display name<input id="nameInput" maxlength="32" required autocomplete="off"></label>
+        <p class="muted">Villagers will see and @mention you by this name. Your past messages update too.</p>
+        <div class="dialog-actions"><button class="run-btn" value="save">Save</button></div>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="channelDialog" class="viewer small">
     <form method="dialog" id="channelForm">
-      <header><span>Create channel</span><button class="icon-btn" value="cancel" formnovalidate>✕</button></header>
+      <header><span>Create channel</span><button type="button" class="icon-btn" data-close>✕</button></header>
       <div class="viewer-body">
         <label>Channel name<input id="channelName" placeholder="new-channel" required></label>
         <label>Topic<input id="channelTopic" placeholder="What's it for?"></label>

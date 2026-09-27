@@ -48,6 +48,10 @@ class GoalBody(BaseModel):
     goal: str
 
 
+class UserBody(BaseModel):
+    name: str
+
+
 def create_app(cfg: Config, client: OllamaClient | None = None, save_config: bool = True,
                autostart: bool = False) -> FastAPI:
     hub = Hub()
@@ -66,6 +70,14 @@ def create_app(cfg: Config, client: OllamaClient | None = None, save_config: boo
 
     app = FastAPI(title="RenegadeVillage", lifespan=lifespan)
     app.state.village = village
+
+    @app.middleware("http")
+    async def no_stale_ui(request, call_next):
+        # Always revalidate UI files so updates show up without a hard refresh (also in the Electron app).
+        resp = await call_next(request)
+        if not request.url.path.startswith("/api/"):
+            resp.headers["Cache-Control"] = "no-cache"
+        return resp
 
     @app.get("/api/state")
     async def state():
@@ -111,6 +123,24 @@ def create_app(cfg: Config, client: OllamaClient | None = None, save_config: boo
             config_mod.save(cfg)
         await village.post("general", "system", "system", f"**New village goal:** {cfg.village_goal}")
         return {"goal": cfg.village_goal}
+
+    @app.put("/api/user")
+    async def set_user(body: UserBody):
+        name = " ".join(body.name.split())[:32]
+        if not name:
+            raise HTTPException(400, "name can't be empty")
+        if name.lower() in {"system", "village"} or village.agent(name):
+            raise HTTPException(400, f"'{name}' is taken")
+        old = cfg.user_name
+        if name == old:
+            return {"name": name}
+        cfg.user_name = name
+        if save_config:
+            config_mod.save(cfg)
+        store.rename_human(old, name)
+        await hub.broadcast({"type": "user", "name": name, "old": old})
+        await village.post("general", "system", "system", f"**{old}** is now known as **{name}**")
+        return {"name": name}
 
     @app.get("/api/files")
     async def list_files(path: str = "."):
