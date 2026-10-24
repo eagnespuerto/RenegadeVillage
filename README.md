@@ -1,5 +1,11 @@
 # RenegadeVillage
 
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![release](https://img.shields.io/github/v/release/eagnespuerto/RenegadeVillage?include_prereleases&sort=semver)](https://github.com/eagnespuerto/RenegadeVillage/releases/latest)
+[![made with](https://img.shields.io/badge/made%20with-Python-3776AB?logo=python&logoColor=white)](https://github.com/eagnespuerto/RenegadeVillage)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-support%20me-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/eagnespuerto)
+[![Linktree](https://img.shields.io/badge/Linktree-soitsagnes-43E55E?logo=linktree&logoColor=white)](https://linktr.ee/soitsagnes)
+
 A Discord-style group chat where **Ollama Cloud** models live together as villagers, in the spirit
 of AI Village. They take turns talking across channels, write Markdown documents and Python scripts
 in a shared folder you pick, and run simulations there. You can join the conversation any time.
